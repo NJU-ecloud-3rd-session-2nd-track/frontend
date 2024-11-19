@@ -1,7 +1,19 @@
 import { Check, Copy, FileText } from "lucide-react";
 import Image from "next/image";
-import { useMemo } from "react";
+import { Suspense, use, useMemo } from "react";
 import { Button } from "../../button";
+import PdfDialog from "../../chat/widgets/PdfDialog";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+} from "../../dialog";
 import { FileIcon } from "../../document-preview";
 import {
   HoverCard,
@@ -9,9 +21,9 @@ import {
   HoverCardTrigger,
 } from "../../hover-card";
 import { cn } from "../../lib/utils";
+import { ScrollArea } from "../../scroll-area";
 import { useCopyToClipboard } from "../hooks/use-copy-to-clipboard";
 import { DocumentFileType, SourceData, SourceNode } from "../index";
-import PdfDialog from "../widgets/PdfDialog";
 
 type Document = {
   url: string;
@@ -42,7 +54,9 @@ export function ChatSources({ data }: { data: SourceData }) {
       <div className="font-semibold text-lg">Sources:</div>
       <div className="flex gap-3 flex-wrap">
         {documents.map((document) => {
-          return <DocumentInfo key={document.url} document={document} />;
+          return !document.sources.length ? null : (
+            <DocumentInfo key={document.url} sourceDocument={document} />
+          );
         })}
       </div>
     </div>
@@ -97,9 +111,8 @@ export function SourceNumberButton({
   );
 }
 
-function DocumentInfo({ document }: { document: Document }) {
-  if (!document.sources.length) return null;
-  const { url, sources } = document;
+function DocumentInfo({ sourceDocument }: { sourceDocument: Document }) {
+  const { url, sources } = sourceDocument;
   const fileName = sources[0].metadata.file_name as string | undefined;
   const fileExt = fileName?.split(".").pop();
   const fileImage = fileExt ? FileIcon[fileExt as DocumentFileType] : null;
@@ -148,8 +161,48 @@ function DocumentInfo({ document }: { document: Document }) {
     // open internal pdf dialog for pdf files when click document card
     return <PdfDialog documentId={url} url={url} trigger={DocumentDetail} />;
   }
-  // open external link when click document card for other file types
-  return <div onClick={() => window.open(url, "_blank")}>{DocumentDetail}</div>;
+
+  return (
+    <Dialog>
+      <DialogTrigger>
+        <div>{DocumentDetail}</div>
+      </DialogTrigger>
+      <DialogPortal>
+        <DialogOverlay />
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{fileName}</DialogTitle>
+            {/*<DialogDescription>This is description</DialogDescription>*/}
+          </DialogHeader>
+          {/*This is content*/}
+          <Suspense fallback={""}>
+            <DocumentDialogContent res={fetch(url).then((res) => res.text())} />
+          </Suspense>
+          <DialogFooter>
+            <DialogClose>
+              <div
+                className={
+                  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium " +
+                  "ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 " +
+                  "bg-primary text-primary-foreground hover:bg-primary/90 " +
+                  "h-10 px-4 py-2"
+                }
+              >
+                Close
+              </div>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </DialogPortal>
+    </Dialog>
+  );
+}
+
+function DocumentDialogContent({ res }: { res: Promise<string> }) {
+  const content = use(res);
+  console.log(content);
+
+  return <ScrollArea className={"h-72 w-128 rounded-md"}>{content}</ScrollArea>;
 }
 
 function NodeInfo({ nodeInfo }: { nodeInfo: SourceNode }) {
